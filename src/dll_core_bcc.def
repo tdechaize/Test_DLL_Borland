@@ -1,0 +1,12 @@
+EXPORTS
+Addint=_Addint 
+Hello=_Hello 
+Substractint=_Substractint 
+Multiplyint=_Multiplyint 
+Squareint=_Squareint 
+Adddbl=_Adddbl 
+Substractdbl=_Substractdbl 
+Multiplydbl=_Multiplydbl 
+Squaredbl=_Squaredb 
+
+

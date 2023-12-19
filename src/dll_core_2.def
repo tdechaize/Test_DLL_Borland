@@ -1,0 +1,24 @@
+LIBRARY     DLL_CORE.DLL
+
+EXPORTS
+    Adddbl                         @18  ; Adddbl
+    Addint                         @13  ; Addint
+    DllEntryPoint                  @1   ; DllEntryPoint
+    DllMain                        @12  ; DllMain
+    Hello                          @14  ; Hello
+    Multdbl                        @20  ; Multdbl
+    Multint                        @16  ; Multint
+    Squardbl                       @21  ; Squardbl
+    Squarint                       @17  ; Squarint
+    Subdbl                         @19  ; Subdbl
+    Subint                         @15  ; Subint
+    _Adddbl                        @7   ; _Adddbl
+    _Addint                        @3   ; _Addint
+    _Hello                         @2   ; _Hello
+    _Multdbl                       @9   ; _Multdbl
+    _Multint                       @5   ; _Multint
+    _Squardbl                      @10  ; _Squardbl
+    _Squarint                      @6   ; _Squarint
+    _Subdbl                        @8   ; _Subdbl
+    _Subint                        @4   ; _Subint
+    ___CPPdebugHook                @11  ; ___CPPdebugHook

@@ -1,0 +1,1595 @@
+					 Bilan concernant la construction et les tests d'une DLL 
+			avec le compilateur Borland C/C++ version 5.5.1 sur Windows 11 64 bits
+	 
+Tout d'abord rappelons l'installation préalable de ce compilateur C/C++ déjà très ancien, mais qui donne encore de 
+bon résultats malgrè ces limitations en comparaison de versions de compilateurs plus "up to date". 
+
+A partir du site https://en.freedownloadmanager.org/Windows-PC/C-Compiler-FREE.html, il faut télécharger le fichier suivant
+	freecommandLinetools.exe (installateur du compilateur Borland C/C++ de Borland/Imprise version 5.5.1, the "last free").
+
+J'ai installé ce compilateur sur C:\BCC55 (j'ai enlevé Borland devant par défaut), mais tout autre répertoire
+est possible. 
+
+Et, je vous met quelques rappels du fonctionnement par défaut de ce compilateur (in english in the text ...) :
+
+Calling Convention Options du compilateur Borland C/C++ 5.51 :
+
+Calling conventions determine the calling sequences that the compiler generates for function calls. 
+Calling conventions differ in the way that each one handles stack cleanup, order of parameters, case, 
+and prefix of global identifiers.
+
+You can set the calling convention of your project in the IDE from the C++ Compiler options page 
+in Project > Options. 
+You can also use the keyword of a calling convention on specific functions to override the default 
+calling convention on those functions only.
+
+Calling Convention 		Description 									Keyword 	Command-Line 
+																					   Switch
+
+C				Underscores are generated, names are case sensitive,	__cdecl			-pc
+				parameters are pushed right to left.									-p-
+				Functions can take a variable parameter list(the 
+				number of parameters does not need to be fixed).
+				This is the default calling convention of BCC32.
+	
+Pascal			Underscores are not generated, names are uppercase, 	__pascal		-p
+				the caller function has to clean the stack, the 
+				parameters are pushed left to right.
+				The resulting function calls are usually smaller and 
+				faster than those made with the C calling convention. 
+				Functions must pass the correct number and type of 
+				arguments.
+	
+Register (fastcall) Passes the first three arguments (evaluated from 	__fastcall		-pm
+				left to right) that fit into EAX, EDX, ECX, and pushes 					-pr
+				the remaining arguments onto the stack from left to 
+				right.
+	
+Standard Call	Underscores are not generated, name case is preserved, 	__stdcall		-pm 
+				callee function has to clean the stack, parameters are 
+				pushed right to left.
+				Functions must pass the correct number and type of 
+				arguments.
+
+Output Files with Borland compiler C/C++ v 5.51 (32 bits) :
+				
+File Type 					File Extension 			File Format
+
+Executable 					.exe 					PE32
+Shared Library 				.dll 					PE32
+Static Library 				.lib 					OMF
+Compiled Object 			.obj 					OMF
+
+Vu l'ancienneté de ce compilateur, il ne sait générer que des executables et des DLL au format OMF, alors que Microsoft
+n'utilise plus que le format COFF pour ces types de fichiers depuis son passage en Windows NT. 
+Ce qui signifie portabilité ... quasi nulle, seule une utilisation dans le "scope" de ce compilateur et de ces outils 
+reste l'option possible. Vous verrez à la fin de ce test complet les conséquences de ces restrictions.
+
+En préambule, j'ai aussi consulté sur Internet quelques bons tutos sur la construction de DLL et leurs utilisations.
+
+Voici une liste non exhaustive de ces recherches :
+	a) sur le site "developpez.com" (https://www.developpez.com/), un trés bon tutoriel expliquant les deux
+		modes d'usage d'une DLL : le mode explicite avec des fonctions Windows et le mode implicite (présence
+		de la DLL dans le PATH) : https://melem.developpez.com/tutoriels/api-windows/bibliotheques-dynamiques-dlls/
+	b) un excellent article de Mark Payne sur la construction d'une DLL, versionnée ou non, et avec ressources :
+		https://www.transmissionzero.co.uk/computing/building-dlls-with-mingw/
+		Avec cet exemple, la présence d'un fichier d'include avec l'astuce de tester la présence d'une "variable define" 
+		lors des compilations permettant de préfixer les functions par "__declspec(dllexport)" pour la génération de la DLL,
+		et par le préfixage par "__declspec(dllimport)" lors de l'utilisation de la DLL, me semblait fortement souhaité.
+	c) l'exemple de Chris Wellons "How to build and use DLLs on Windows", lui aussi très instructif :
+				https://nullprogram.com/blog/2021/05/31/
+	d) pour une description approfondie du mode d'appel __stdcall et une comparaison des différents compilateurs sous Windows, 
+		j'ai trouvé cet article très intéressant :	https://www.willus.com/mingw/yongweiwu_stdcall.html
+	e) pour les débutants : https://www.codeguru.com/cplusplus/dll-tutorial-for-beginners/
+	f) en dernier, pour ceux qui s'intéressent aux différents types d'appels de fonctions, l'excellent article
+		de WikiPedia : https://en.wikipedia.org/wiki/X86_calling_conventions
+
+Puis, j'ai trouvé un premier exemple de DLL compilé avec le compilateur Borland sur le site
+	https://community.embarcadero.com/article/technical-articles/149-tools/14627-how-to-build-and-use-a-simple-dll 
+et des compléments sur:
+	https://community.embarcadero.com/article/technical-articles/162-programming/14578-linking-32-bit-microsoft-dlls-with-borland-c
+Puis, en cherchant encore, une discussion sur les possibilités de créer une DLL avec Borland :
+	https://www.developpez.net/forums/d2171/c-cpp/outils-c-cpp/autres-editeurs/creer-dll-borland-cpp-compiler/
+Je cite pour mémoire une discussion sur gcc et la construction de DLL pour un appel dans un autre programme :
+	https://stackoverflow.com/questions/847396/compile-a-dll-in-c-c-then-call-it-from-another-program
+Pour revenir à Borland C/C++, un autre article explicatif sur la constructiond de DLL :
+	http://www.delphigroups.info/3/4/6867.html
+Enfin, en partant d'une discussion sur la construction de DLL en Delphi, j'ai pris l'exemple des codes fournis sur :
+	http://www.delphigroups.info/3/12/46259.html
+	
+Cet exemple fournit un code très simple de fonction "Add2" et "Multiply2" de deux entiers qui constitue le corps 
+de la DLL et d'un  programme de test en C++ par un appel implicite de cette DLL utilisant l'interface Windows (GUI).
+J'ai simplifié ce programme de test pour le passer en mode console et un affichage des résultats par "printf", et j'ai
+renommé les fonctions en "Add" et "Multiply", et j'ai aussi rajouté des informations supplémentaires dans l'include.
+
+Fichiers sources de l'exemple initial (DllCode.c, DllCode.h et ProgCode.cpp) :
+
+DllCode.c
+
+//*********************    File : DllCode.c (main core of dll)    *****************
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdio.h>
+#include "dllcode.h"
+
+/* pragma suppresses "calling argument not used" warnings during compilation */
+#pragma argsused
+
+BOOL WINAPI DllEntryPoint(HINSTANCE hinst, DWORD reason, LPVOID reserved)
+{
+    switch( reason ) {
+    case DLL_PROCESS_ATTACH:
+        printf( "DLL attaching to process...\n" );
+        break;
+    case DLL_PROCESS_DETACH:
+        printf( "DLL detaching from process...\n" );
+        break;
+		// The attached process creates a new thread.
+	case DLL_THREAD_ATTACH:
+		printf("The attached process creating a new thread...\n");
+		break;
+		// The thread of the attached process terminates.
+	case DLL_THREAD_DETACH:
+		printf("The thread of the attached process terminates...\n");
+		break;
+	default:
+		printf("Reason called not matched, error if any : %ld...\n", GetLastError());
+		break;
+    }
+    return( 1 );    /* Indicate success */
+}
+
+
+ADDAPI int Add(int a, int b)
+{
+  return a + b;
+}
+
+ADDAPI int Multiply(int a, int b)
+{
+  return a * b;
+}
+//******************************    End DllCode.c   *********************************
+
+DllCode.h (un peu modifié/amendé par rapport à l'exemple de base)
+
+//**********************  File : dllcode.h (include file shared beetween build or use DLL)  ****************
+#ifndef DLLCODE_H
+#define DLLCODE_H
+
+/* Test Windows platform */
+
+#if defined(__NT__) || defined(_WIN32) || defined(_Windows) // __NT__ with OpenWatcom, _WIN32 with GCC, MSVC, clang, Pelles C, lcc (?) _Windows with Borland C/C++ defined Windows Platforms
+
+  /* You should define BUILD_DLL *only* when building the DLL. */
+  
+  #ifdef BUILD_DLL
+    #define ADDAPI  __declspec(dllexport)
+  #else
+    #define ADDAPI  __declspec(dllimport)
+  #endif
+
+  /* Define calling convention in one place, for convenience. */
+  #if defined(__LCC__) // || defined(__WATCOMC__)
+    #define ADDCALL  _stdcall
+  #elif defined (__BORLANDC__) || defined(__POCC__)
+    #define ADDCALL  __stdcall
+  #else	
+    #define ADDCALL  __cdecl
+  # endif
+
+#elif defined(_linux) || defined(UNIX)
+
+	#if defined(BUILD_DLL) && defined(HAS_GCC_VISIBILITY)
+	#   define ADDAPI  _attribute_  _((visibility("default")))
+	#endif
+
+#else /* __NT__ or _WIN32 or _Windows or _Linux not defined. */
+
+  /* Define with no value on non-Windows OSes. */
+  #define ADDAPI
+  #define ADDCALL
+
+#endif
+
+/* if used by C++ code, identify these functions as C items */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+  ADDAPI int Add(int a, int b);
+
+  ADDAPI int Multiply(int a, int b);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+//*****************************          End : dllcode.h      *****************************
+
+ProgCode.cpp (modifié pour le rendre "indépendant" de Windows (pas trop), passage en mode "console")
+
+//*********************  File : ProgCode.cpp (program main test of dll, with load implicit)  *****************
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "dllcode.h"
+
+/* pragma suppresses "calling argument not used" warnings during compilation */
+#pragma argsused
+
+int main(int argc, char** argv)
+{
+	int  aa,bb,cc;
+	aa = 4;
+	bb = 7;
+
+	cc = Add(aa, bb);
+
+	printf("La somme de %i plus %i vaut %i. (from application %s)\n", aa, bb, cc, argv[0]);
+
+	cc = Multiply(aa, bb);
+
+	printf("Le produit de %i par %i vaut %i. (from application %s)\n", aa, bb, cc, argv[0]);
+
+	return EXIT_SUCCESS;
+}
+// ****************************************   End ProgCode.cpp   *********************************************
+
+Ce dernier source en C++, est en fait maintenant un "pur" source en C ... après modifications.
+J'ai installé ces sources sur le répertoire C:\src\Borland\TestDLL, mais tout autre répertoire peut être utilisé.
+
+Pour compiler et linker ces deux sources, j'ai pris l'exemple du makefile très simple après avoir rajouter C:\BC55\bin
+dans le PATH (indispensable pour la compilation et le l'édition des liens, mais aussi pour la comamnde "make")
+
+"Project.mak" : 
+
+# **************************************     File : Project.mak     ******************************
+# comments start with the pound symbol
+# automatically check if a header file has changed
+.autodepend
+
+# -WR windows GUI exe dynamic linked (-W for static linked)
+# -WC console application exe dynamic linked (-W for static linked)
+# -v generate debug info
+progcode.exe : dllcode.lib progcode.cpp
+  bcc32 -WC -v progcode dllcode.lib
+
+# create an import library
+# -c case sensitive
+dllcode.lib : dllcode.dll
+  implib -c dllcode.lib dllcode.dll
+
+# C code does not need runtime type id or exception
+# handling so they are suppressed with -RT- and -x-
+# noeh32.lib stubs out any of those things found in
+# the libraries, making the output file smaller
+# -WDR windows dll dynamic linked (-WD for static linked)
+# -v generate debug info
+dllcode.dll : dllcode.c
+  bcc32 -DBUILD_DLL -WDR -v -RT- -x- dllcode.c noeh32.lib
+# **************************************     End Project.mak     ******************************
+
+Voic le résultat de la commande make réalisé avec le makefile : Project.mak
+
+make -f Project.mak
+MAKE Version 5.2  Copyright (c) 1987, 2000 Borland
+        bcc32 -DBUILD_DLL -WDR -v -RT- -x- dllcode.c noeh32.lib
+Borland C++ 5.5.1 for Win32 Copyright (c) 1993, 2000 Borland
+DllCode.c:
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland
+        implib -c dllcode.lib dllcode.dll
+
+Borland Implib Version 3.0.22 Copyright (c) 1991, 2000 Inprise Corporation
+        bcc32 -WC -v progcode dllcode.lib
+Borland C++ 5.5.1 for Win32 Copyright (c) 1993, 2000 Borland
+ProgCode.cpp:
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland 
+
+Puis le lancement du programme de test avec chargement implicite de la DLL donne le résultat 
+suivant :
+
+"ProgCode.exe"
+
+DLL attaching to process...
+La somme de 4 plus 7 vaut 11. (from application C:\src\Borland\TestDLL\ProgCode.exe)
+Le produit de 4 par 7 vaut 28. (from application C:\src\Borland\TestDLL\ProgCode.exe)
+DLL detaching from process...
+
+Comme, on peut le voir, aucune difficulté pour générer une DLL et puis la tester avec un 
+programme de test.
+
+ATTENTION : Si vous lancer ce programme de test dans avoir le répertoire \bin du compilateur 
+Borland dans le PATH, vous obtenez une erreur car la DLL CC3250.DLL n'est pas accessible.
+En cas de portage sur plusieurs ordinateurs, il faut veiller à la copier "au bon endroit",
+soit dans le répertoire courant, soit dans un répertoire accessible dans le PATH.
+Autre option plus simple, il suffit de remettre l'option "-RT" dans le makefile, et relancer
+la génération globale, alors le programme ProgCode.exe est réellement "portable" sur tous les 
+environnements Windows.
+
+A partir de ce constat positif, je dédide de renommer les sources de cet exemple, et de les
+amender avec des programmes de tests avec chargement explicite de la DLL constituée, puis
+de rajouter un script python de test de la DLL, de rajouter des fonctions à notre 
+DLL afin de la rendre un peu plus complexe : des opérations sur les entiers, mais aussi sur
+des doubles flottants, et enfin de déplacer les sources sous le répertoire \src.
+
+Pour les changements de noms, DllCode.c devient dll_core.c, DllCode.h devient dll_share.h,
+ProgCode.cpp devient testdll_implicit.c, je rajoute un programme de test avec chargement 
+explicite de la DLL (testdll_explicit.c), et enfin le script python (testdll_cdecl.py).
+En effet, le mode d'appel des fonctions de la DLL se font en __cdecl avec ce compilateur.
+
+Je créé aussi un programme de compilation et d'édition des liens qui me permet d'y rajouter
+l'exécution des programmes de tests comme du script python : compile_link_dll_bcc_OK.bat.
+
+Ces différents codes sources deviennent donc les suivants :
+
+"dll_core.c" :
+
+//*********************    File : dll_core.c (main core of dll)    *****************
+// #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdio.h>
+#include "dll_share.h"
+
+/* pragma suppresses "calling argument not used" warnings during compilation */
+#pragma argsused
+// Warning, this pragma is specific to Borland C/C++ compiler 
+
+/*------------------------------------------------------------------------
+ Procedure:     DllEntryPoint
+ Purpose:       Dll entry point. Called when a dll is loaded or
+                unloaded by a process, and when new threads are
+                created or destroyed.
+ Input:         hinst : 		Instance handle of the dll
+                reason : 		event: attach/detach
+                reserved : 		not used
+ Output:        The return value is used only when the fdwReason is
+                DLL_PROCESS_ATTACH. True means that the dll has
+                sucesfully loaded, False means that the dll is unable
+                to initialize and should be unloaded immediately.
+ Errors:
+------------------------------------------------------------------------*/
+
+BOOL WINAPI FUNCAPI DllEntryPoint(HINSTANCE hinst, 
+						  DWORD 	reason, 
+						  LPVOID    reserved)
+{
+    switch( reason ) {
+    case DLL_PROCESS_ATTACH:
+        printf( "DLL attaching to process...\n" );
+        break;
+    case DLL_PROCESS_DETACH:
+        printf( "DLL detaching from process...\n" );
+        break;
+		// The attached process creates a new thread.
+	case DLL_THREAD_ATTACH:
+		printf("The attached process creating a new thread...\n");
+		break;
+		// The thread of the attached process terminates.
+	case DLL_THREAD_DETACH:
+		printf("The thread of the attached process terminates...\n");
+		break;
+	default:
+		printf("Reason called not matched, error if any : %ld...\n", GetLastError());
+		break;
+    }
+    return( 1 );    /* Indicate success */
+}
+
+/*------------------------------------------------------------------------
+
+ Another instructions : 		list of exported functions of DLL. 
+ 
+ All functions must be declared in dll_share.h, but instancied here
+ with body described all instructions to execute "really" that for 
+ which each function is defined. Noted prefix FUNCAPI valued at :
+		__declspec(dllexport) when generate DLL
+		__declspec(dllimport) when use DLL
+ 
+------------------------------------------------------------------------*/
+
+FUNCAPI int Hello(void)
+ {
+    printf( "Hello from a DLL!\n" );
+    return( 0 );
+ }
+
+FUNCAPI int Addint(int i1, int i2)
+ {
+	return i1 + i2;
+ }
+ 
+FUNCAPI int Subint(int i1, int i2)
+ {
+	return i1 - i2;
+ }
+
+FUNCAPI int Multint(int i1, int i2)
+ { 
+   return i1 * i2;
+ }
+ 
+FUNCAPI int Divint(int i1, int i2) 
+ {
+  if (i2 == 0) { 
+     printf("La division par zero n'est pas autorisee, le retour vaut 1 par défaut.\n");
+     return(1);
+  } else { 
+	  return (i1/i2);
+  }
+ }
+  
+FUNCAPI int Squarint(int i)
+ { 
+   return i * i;
+ }
+
+FUNCAPI double Adddbl(double i1, double i2)
+ {
+	return i1 + i2;
+ }
+ 
+FUNCAPI double Subdbl(double i1, double i2)
+ {
+	return i1 - i2;
+ }
+
+FUNCAPI double Multdbl(double i1, double i2)
+ { 
+   return i1 * i2;
+ }
+  
+ FUNCAPI double Divdbl(double i1, double i2) 
+ {
+  if (i2 == 0.0) { 
+     printf("La division par zero n'est pas autorisee, le retour vaut 1 par défaut.\n");
+     return(1.0);
+  } else   {
+	  return (i1/i2);
+  }
+ }
+
+FUNCAPI double Squardbl(double i)
+ { 
+   return i * i;
+ }
+//******************************    End file : dll_core.c   *********************************
+
+"dll_share.h" :
+
+//**********************  File : dll_share.h (include file shared beetween build or use DLL)  ****************
+#ifndef DLLCODE_H
+#define DLLCODE_H
+
+/* Test Windows platform */
+
+#if defined(__NT__) || defined(_WIN32) || defined(_Windows) // __NT__ with OpenWatcom, _WIN32 with GCC, MSVC, clang, Pelles C, lcc (?) _Windows with Borland C/C++ defined Windows Platforms
+
+  /* You should define BUILD_DLL *only* when building the DLL. */
+  
+  #ifdef BUILD_DLL
+    #define FUNCAPI  __declspec(dllexport)
+  #else
+    #define FUNCAPI  __declspec(dllimport)
+  #endif
+
+  /* Define calling convention in one place, for convenience. */
+  #if defined(__LCC__) // || defined(__WATCOMC__)
+    #define FUNCALL  _stdcall
+  #elif defined (__BORLANDC__) || defined(__POCC__)
+    #define FUNCALL  __stdcall
+  #else	
+    #define FUNCALL  __cdecl
+  # endif
+
+#elif defined(_linux) || defined(UNIX)
+
+	#if defined(BUILD_DLL) && defined(HAS_GCC_VISIBILITY)
+	#   define FUNCAPI  _attribute_  _((visibility("default")))
+	#endif
+
+#else /* __NT__ or _WIN32 or _Windows or _Linux not defined. */
+
+  /* Define with no value on non-Windows OSes. */
+  #define FUNCAPI
+  #define FUNCALL
+
+#endif
+
+/* if used by C++ code, identify these functions as C items */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*------------------------------------------------------------------------
+
+ Another instructions : 		declarations of exported functions of DLL. 
+ 
+ All functions must be declared here, but instancied in file dll_core.c. 
+ Noted prefix FUNCAPI valued at :
+		__declspec(dllexport) when generate DLL (define BUILD_DLL)
+		__declspec(dllimport) when use DLL (not define BUILD_DLL)
+ 
+------------------------------------------------------------------------*/
+
+FUNCAPI int Hello(void);
+FUNCAPI int Addint(int i1, int i2);
+FUNCAPI int Subint(int i1, int i2);
+FUNCAPI int Multint(int i1, int i2);
+FUNCAPI int Divint(int i1, int i2);
+FUNCAPI int Squarint(int i);
+FUNCAPI double Adddbl(double i1, double i2);
+FUNCAPI double Subdbl(double i1, double i2);
+FUNCAPI double Multdbl(double i1, double i2);
+FUNCAPI double Divdbl(double i1, double i2);
+FUNCAPI double Squardbl(double i);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+//*****************************          End file : dll_share.h      *****************************
+
+"dlltest_implicit.c" :
+
+//*********************  File : testdll_implicit.c (program main test of dll, with load implicit)  *****************
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "dll_share.h"
+
+/* pragma suppresses "calling argument not used" warnings during compilation */
+#pragma argsused
+// Warning, this pragma is specific to Borland C/C++ compiler 
+
+int main(int argc, char** argv)
+{
+  int a = 42;
+  int b = 7;
+  int result = 0;
+  double a1 = 16.9;
+  double b1 = 7.3;
+  double result1 = 0.0;
+  
+  Hello();
+  result = Addint(a, b);
+  printf("----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------\n");
+  printf("Le resultat de l'addition de %i plus %i vaut : %i. \t (from application with implicit load of DLL %s)\n", a,b,result,argv[0]);
+  result = Subint(a, b);
+  printf("Le resultat de la soustraction de %i moins %i vaut : %i.  (from application with implicit load of DLL %s)\n", a,b,result,argv[0]);
+  result = Multint(a, b);
+  printf("Le resultat de la multiplication de %i par %i vaut : %i. (from application with implicit load of DLL %s)\n", a,b,result,argv[0]);
+  result = Divint(a, b);
+  printf("Le resultat de la division de %i par %i vaut : %i.         (from application with implicit load of DLL %s)\n", a,b,result,argv[0]);
+  result = Squarint(b);
+  printf("Le carre de %i par %i vaut : %i. \t\t\t\t (from application with implicit load of DLL %s)\n", b,b,result,argv[0]);
+  printf("----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------\n");
+  result1 = Adddbl(a1, b1);
+  printf("La somme de %.1f plus %.1f vaut %.2f. \t       (from application with implicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+  result1 = Subdbl(a1, b1);
+  printf("La soustraction de %.1f moins %.1f vaut %.2f.   (from application with implicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+  result1 = Multdbl(a1, b1);
+  printf("La multiplication de %.1f par %.1f vaut %.2f. (from application with implicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+  result1 = Divdbl(a1, b1);
+  printf("La division de %.1f par %.1f vaut %.5f.        (from application with implicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+  result1 = Squardbl(b1);
+  printf("Le carre de %.1f par %.1f vaut %.2f. \t       (from application with implicit load of DLL %s)\n", b1,b1,result1,argv[0]);	
+
+  return EXIT_SUCCESS;
+}
+// ****************************************   End file : testdll_implicit.c   *******************************************
+
+"testdll_explicit.c" :
+
+//*********************  File : testdll_explicit.c (program main test of dll, with load explicit)  *****************
+#include <stdio.h>
+#include <windows.h>
+// #include "dll_share.h"
+
+/* pragma suppresses "calling argument not used" warnings during compilation */
+#pragma argsused
+// Warning, this pragma is specific to Borland C/C++ compiler 
+
+typedef int (*HelloFunc)();
+typedef int (*AddFuncint)(int,int);
+typedef int (*SubFuncint)(int,int);
+typedef int (*MulFuncint)(int,int);
+typedef int (*DivFuncint)(int,int);
+typedef int (*SquarFuncint)(int);
+typedef double (*AddFuncdbl)(double,double);
+typedef double (*SubFuncdbl)(double,double);
+typedef double (*MulFuncdbl)(double,double);
+typedef double (*DivFuncdbl)(double,double);
+typedef double (*SquarFuncdbl)(double);
+
+
+int main( int argc, char *argv[ ] )
+{
+	int a = 42;
+	int b = 7;
+	int result=0;
+	double a1 = 16.9;
+	double b1 = 7.3;
+	double result1 = 0.0;
+	
+	HINSTANCE hLib = LoadLibrary("dll_core.dll");
+	
+	if (hLib != NULL) {
+
+		HelloFunc af0 = (HelloFunc)GetProcAddress(hLib, "Hello");	
+		AddFuncint af1 = (AddFuncint)GetProcAddress(hLib, "Addint");
+		SubFuncint af2 = (SubFuncint)GetProcAddress(hLib, "Subint");	
+		MulFuncint af3 = (MulFuncint)GetProcAddress(hLib, "Multint");
+		DivFuncint af4 = (MulFuncint)GetProcAddress(hLib, "Divint");
+		SquarFuncint af5 = (SquarFuncint)GetProcAddress(hLib, "Squarint");
+		AddFuncdbl af6 = (AddFuncdbl)GetProcAddress(hLib, "Adddbl");
+		SubFuncdbl af7 = (SubFuncdbl)GetProcAddress(hLib, "Subdbl");	
+		MulFuncdbl af8 = (MulFuncdbl)GetProcAddress(hLib, "Multdbl");
+		DivFuncdbl af9 = (MulFuncdbl)GetProcAddress(hLib, "Divdbl");
+		SquarFuncdbl af10 = (SquarFuncdbl)GetProcAddress(hLib, "Squardbl");
+	
+		(*af0)();
+		printf("----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------\n");		
+		result = (*af1)(a, b);
+		printf("La somme de %i plus %i vaut %i. \t\t(from application with explicit load of DLL %s)\n", a,b,result,argv[0]);
+		result = (*af2)(a, b);
+		printf("La soustraction de %i moins %i vaut %i.  (from application with explicit load of DLL %s)\n", a,b,result,argv[0]);
+		result = (*af3)(a, b);
+		printf("La multiplication de %i par %i vaut %i. (from application with explicit load of DLL %s)\n", a,b,result,argv[0]);
+		result = (*af4)(a, b);
+		printf("La division de %i par %i vaut %i.       (from application with explicit load of DLL %s)\n", a,b,result,argv[0]);
+		result = (*af5)(b);
+		printf("Le carre de %i par %i vaut %i.\t\t(from application with explicit load of DLL %s)\n", b,b,result,argv[0]);
+		printf("----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------\n");	
+		result1 = (*af6)(a1, b1);
+		printf("La somme de %.1f plus %.1f vaut %.2f. \t       (from application with explicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+		result1 = (*af7)(a1, b1);
+		printf("La soustraction de %.1f moins %.1f vaut %.2f.   (from application with explicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+		result1 = (*af8)(a1, b1);
+		printf("La multiplication de %.1f par %.1f vaut %.2f. (from application with explicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+		result1 = (*af9)(a1, b1);
+		printf("La division de %.1f par %.1f vaut %.5f.       (from application with explicit load of DLL %s)\n", a1,b1,result1,argv[0]);
+		result1 = (*af10)(b1);
+		printf("Le carre de %.1f par %.1f vaut %.2f. \t       (from application with explicit load of DLL %s)\n", b1,b1,result1,argv[0]);	
+		
+		FreeLibrary(hLib);
+		
+	} else { 	
+		printf("Unable to load the specified DLL : dll_core.dll.");
+	}
+	
+	return EXIT_SUCCESS;
+}
+// ****************************************     End file : testdll_explicit     ***********************************************
+
+Voici le fichier de définition des fonctions exportées (j'ai fait des essais pour résoudre le problème de test
+avec le script python en ajoutant DllMain, sans succès ...) qui se trouve en deux endroits (bug Borland), d'abord
+sur le répertoire principal, mais aussi sous src\dll_core.def :
+
+"dll_core.def"
+
+EXPORTS
+DllMain=DllEntryPoint
+_DllMain=DllMain
+Addint=_Addint
+Hello=_Hello 
+Subint=_Subint 
+Multint=_Multint 
+Squarint=_Squarint 
+Adddbl=_Adddbl
+Subdbl=_Subdbl
+Multdbl=_Multdbl 
+Squardbl=_Squardbl
+
+Remarque : pour mémoire, j'ai fait des tests en "une passe" avec l'option "-u-", mais la génération n'aboutit pas avec 
+un message d'erreur "Error: Unresolved external 'printf' referenced from C:\SRC\BORLAND\TESTDLL\DLL_CORE.OBJ". 
+J'ai essayé de rajouter des options de linker pour indiquer les répertoires des librairies, mais sans succès.
+Appel à volontaire ? 
+J'ai donc du me rabattre sur l'option d'utiliser des alias de fonctions dans un fichier de définition.
+
+Le nouveau script de génération d'ensemble est le suivant :
+
+"compile_link_dll_bcc_OK.bat" :
+
+@echo off
+REM
+REM   	Script de génération de la DLL dll_core.dll et des programmee de test : "testdll_implicit.exe" (chargement implicite de la DLL),
+REM 	"testdll_explicit.exe" (chargement explicite de la DLL), et enfin du script de test écrit en python.
+REM		Ce fichier de commande est paramètrable avec deux paraamètres : 
+REM			a) le premier paramètre permet de choisir la compilation et le linkage des programmes en une seule passe
+REM 			soit la compilation et le linkage en deux passes successives : compilation séparée puis linkage,
+REM 		b) le deuxième paramètre définit soit une compilation et un linkage en mode 32 bits, soit en mode 64 bits
+REM 	 		pour les compilateurs qui le supportent.
+REM     Le premier paramètre peut prendre les valeurs suivantes :
+REM 		ONE ou TWO or ALL (or unknown value, because only ONE and TWO value are tested during execution)
+REM     Et le deuxième paramètre peut prendre les valeurs suivantes :
+REM 		32, 64 ou  ALL si vous souhaitez lancer les deux générations, 32 bits et 64 bits.
+REM 	Dans le cas du compilateur Borland C/C++, une seule génération possible : 32 bits, ce deuxième paramètre est donc ignoré.
+REM
+REM 	Author : 						Thierry DECHAIZE
+REM		Date creation/modification : 	20/11/2023
+REM 	Reason of modifications : 	n° 1 - reprise pour apporter des améliorations au script initial : appel de fonctions dans les branches du test
+REM 										sur le premier paramètre.
+REM 	 							n° 2 - Des reliquats de description d'options d'un autre compilateur C à retirer et à remplacer par les bonnes options.
+REM 	 							n° 3 - Remplacement de l'utilitaire "impdef" par "tdump" et generation de la library directement dans les options
+REM 										(simplification).
+REM 	Version number :				1.1.3          	(version majeure . version mineure . patch level)
+
+echo. Lancement du batch de generation d'une DLL et deux tests de celle-ci avec Borland Compiler C/C++ 32 bits version 5.5.1
+REM     Affichage du nom du système d'exploitation Windows :              			Microsoft Windows 11 Famille (par exemple)
+REM 	Affichage de la version du système Windows :              					10.0.22621 (par exemple)
+REM 	Affichage de l'architecture du processeur supportant le système Windows :   64-bit (par exemple)    
+echo.  *********  Quelques caracteristiques du systeme hebergeant l'environnement de developpement.   ***********
+WMIC OS GET Name
+WMIC OS GET Version
+WMIC OS GET OSArchitecture
+
+REM 	Save of initial PATH on PATHINIT variable
+set PATHINIT=%PATH%
+REM      Mandatory, add to PATH the binary directory of compiler Borland C/C++ (You can adapt this directory at your personal software environment)
+set PATH=C:\BCC55\bin;%PATH%
+echo. **********      Pour cette generation le premier parametre vaut "%1" et le deuxieme "%2".     *************
+
+IF "%1" == "ONE" ( 
+   call :complinkONE
+) ELSE (
+   IF "%1" == "TWO" (
+      call :complinkTWO
+   ) ELSE (
+      call :complinkONE
+	  call :complinkTWO
+	)
+)
+
+goto FIN
+
+:complinkONE
+REM 	Format of command "bcc32" (bcc32 is a one-step program to compile and link C++, C and ASM files)
+REM 	 			BCC32 [ options ] file[s] * = default; -x- = turn switch x off 
+REM 	Generation of the DLL in "one pass", with many options :
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WDR							-> set generation to Windows DLL (mandatory, in evidence !!!) and 
+REM 	-RT-							-> disable runtime type id (RTTI) (default is -RT)
+REM 	-x- 							-> disable exception handling 
+REM 	-Dxxxxxxxxxx 	 				-> define a variable xxxxxxxxxx used by precompiler
+REM 	-Ixxxxxxxx  					-> set the search path to include files
+REM 	-Lxxxxxxxx  					-> set the search path to library files (many option -L.... or list of search directory separated by ";")
+REM 	-lGi							-> -lxxx add option to linker, here, option to generate lib file.
+REM 	don't use -e output_file		-> force name of output file, although this name is the same of source file extend of .EXE or .DLL
+REM     		C code does not need runtime type id or exception handling so they are suppressed with -RT- and -x-
+REM     		noeh32.lib stubs out any of those things found in the libraries, making the output file smaller
+echo.  *********************************     Generation de la DLL.       ***********************************
+bcc32 -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK -lGi src/dll_core.c noeh32.lib
+REM     Add src/dll_core.def on the precedent line don't work. Only presence of dll_core.def on present directory work fine !!!!
+REM 	Erratic behaviour of Borland Compiler C/C++, this compiler exploit directly file dll_core.def without message or advertizing !!!!!! 
+REM     Not mandatory, the use of "implib" utility", because option -lGi added with precedent command "bcc32" generate it. Fine !!!
+REM  implib -c dll_core.lib dll_core.dll
+echo.  ***************** 	       Listage des symboles exportes de la DLL 32 bits				*****************
+REM     Use of "tdump" utility" to extract export symbols of dll. It's fine : find symbols/functions with "_", but although without this prefix.
+tdump -q -ee dll_core.dll
+REM 	Generation of the main test program of DLL in "one pass", with implicit load of DLL : a console application.
+echo.  *************  Generation et lancement du premier programme de test de la DLL en mode implicite.   ************
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WC								-> set generation to console program (entry of programm is only "main" not "WinMain")
+bcc32 -q -WC -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK src\testdll_implicit.c dll_core.lib 
+REM 	Run the main test program of DLL in "one pass", with implicit load of DLL :					All success.
+testdll_implicit.exe
+echo.  *************  Generation et lancement du deuxieme programme de test de la DLL en mode explicite.  *************
+REM 	Generation of the main test program of DLL in "one pass", with explicit load of DLL : a console application.
+bcc32 -q -WC -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK src\testdll_explicit.c dll_core.lib
+REM 	Run the main test program of DLL in "one pass", with explicit load of DLL:					All success.
+testdll_explicit.exe
+echo.  *************              Lancement du script python de test de la DLL.                           *************
+REM 	Run the script python to test DLL with arguments passed on "__cdecl" format (another script test exist with call passed on "__stdcall" format)
+REM 																	Fail, don't load DLL correctly !!!!!
+%PYTHON32% version.py
+%PYTHON32% testdll_cdecl.py dll_core.dll
+exit /B 
+
+:complinkTWO
+echo "******************          Compilation de la DLL.        *******************"
+REM Options used with Borland compiler C/C++ 32 bits version 5.5.1 :
+REM		-c 								-> compile only, not call of linker
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WDR							-> set generation to Windows DLL (mandatory, in evidence !!!) and 
+REM 	-RT-							-> disable runtime type id (RTTI) (default is -RT)
+REM 	-x- 							-> disable exception handling 
+REM 	-Dxxxxxxxxxx 	 				-> define a variable xxxxxxxxxx used by precompiler
+bcc32 -c -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG src\dll_core.c 
+REM Format general of ilink32 command : 
+REM     ILINK32 [@<respfile>][<options>] <startup> <myobjs>, [<exefile>],[<mapfile>], [<libraries>], [<deffile>], [<resfiles>]  (comma separated list of flles used by linker)
+REM Options used with linker of Borland C/C++ compiler 32 bits version 5.5.1 :
+REM 	-Tpd							-> set the linker to generate DLL  
+REM 	-aa 							-> set the linker to generate Windows 32 application (NT system or superior, like Windows 7, 8, 10 or 11)
+REM 	-x								-> enable exception handling
+REM 	/Gi    							-> option -Gi tell linker to generate .lib file, but nothing done. Change option to /Gi active generation of lib file.
+REM 	c0d32							-> Startup provide by Borland/Inprise for DLL (anther startup, can be c0w32 for windows application (GUI))
+REM  At the end of this command's line of linker, you must/can indicate def file, not same with bbc32 command line with one pass !!!!! 
+echo "*****************    Edition des liens (linkage) de la DLL.      ***************"
+ilink32 -Tpd -aa -x -q /Gi c0d32 dll_core.obj,dll_core.dll,,import32 cw32i, src\dll_core.def
+REM    Not mandatory, because option -Gi used by linker don't generate library file, but option /Gi do. Good surprise !!!
+REM implib -c dll_core.lib dll_core.dll
+echo.  ***************** 	       Listage des symboles exportes de la DLL 32 bits				*****************
+REM     Use of "tdump" utility" to extract export symbols of dll. It's fine : find symbols/functions with "_", but although without this prefix.
+tdump -q -ee dll_core.dll
+echo "************     Generation et lancement du premier programme de test de la DLL en mode implicite.      *************"
+bcc32 -q -c -D_WIN32 -DNDEBUG src\testdll_implicit.c 
+REM Options used with linker of Borland C/C++ compiler 32 bits version 5.5.1 :
+REM 	-Tpe							-> set option to generate executable
+REM 	-ap 							-> set option to generate console application
+REM 	-c								-> case sensitive linking
+REM 	-Lxxxxxxxx  					-> set the search path to library files (many option -L.... or list of search directory separated by ";")
+REM 	c0x32.obj						-> Startup provide by Borland/Inprise for console application (anther startup, can be c0w32 for windows application (GUI))
+ilink32 -Tpe -ap -c -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK c0x32.obj testdll_implicit.obj,testdll_implicit.exe,,import32 cw32i dll_core.lib
+REM 	Run the main test program of DLL in "two pass", with explicit load of DLL :	  		All success.
+testdll_implicit.exe
+echo "************     Generation et lancement du deuxieme programme de test de la DLL en mode explicite.     ************"
+bcc32 -q -c -D_WIN32 -DNDEBUG src\testdll_explicit.c 
+ilink32 -Tpe -ap -c -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK c0x32.obj testdll_explicit.obj,testdll_explicit.exe,,import32 cw32i dll_core.lib
+REM 	Run the main test program of DLL in "two pass", with explicit load of DLL :			All success.
+testdll_explicit.exe
+REM 	Execution of python script (version 32 bits) to test DLL : 						Fail, don't load DLL correctly !!!!!
+echo "****************                  Lancement du script python de test de la DLL.                  ********************"
+%PYTHON32% version.py
+%PYTHON32% testdll_cdecl.py dll_core.dll
+exit /B 
+
+:FIN
+echo.       Fin de la generation de la DLL et des tests avec Borland Compiler C/C++ 32 bits version 5.5.1   
+REM 	Return in initial PATH
+set PATH=%PATHINIT%
+
+NB : J'ai laissé l'option "-RT-" dans ce script. Si vous souhaitez générer une DLL avec une portabilité "totale" 
+sous Windows, il faut modifier ce script en la remplacant par l'option "-RT".
+
+Le script python de test est le suivant :
+
+"testdll_cdecl.py" :
+
+# **************************************     File : testdll_cdecl.py     ******************************
+#testdll_cdecl.py
+import ctypes, ctypes.util
+import os
+import sys
+
+if len( sys.argv ) == 1:
+    print( "testdll_cdecl.py script wrote by Thierry DECHAIZE, thierry.dechaize@gmail.com" )
+    print( "\tusage: python test_add_cdecl.py Name_of_Dll." )
+    exit()
+
+cwd = os.getcwd()
+dll_name = cwd + '\\' + sys.argv[1]
+mydll_path = ctypes.util.find_library(dll_name)
+if not mydll_path:
+    print("Unable to find the specified DLL.")
+    sys.exit()
+
+#mydll = ctypes.WinDLL(dll_name)          # load the dll __stdcall
+try:
+    mydll = ctypes.CDLL(dll_name)      # load the dll __cdecl
+except OSError:
+    print(f"Unable to load the specified DLL : {sys.argv[1]}.")
+    sys.exit()
+
+# test mandatory in case of Borland generation, the export function is decorated by "_" prefix  => call _Add
+if 'BC55' in sys.argv[1]  or 'PELLESC64' in sys.argv[1] or 'OW32' in sys.argv[1]:
+#   mydll._Hello(None)
+    print(f"----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------");
+    mydll._Addint.argtypes = [ctypes.c_int, ctypes.c_int]
+    print(f"La somme de 42 plus 7 vaut {mydll._Addint(42, 7)}. (from script python {sys.argv[0]})")
+    mydll._Subint.argtypes = [ctypes.c_int, ctypes.c_int]
+    print(f"La difference de 42 moins 7 vaut {mydll._Subint(42, 7)}. (from script python {sys.argv[0]})")
+    mydll._Multint.argtypes = [ctypes.c_int, ctypes.c_int]
+    print(f"La multiplication de 42 par 7 vaut {mydll._Multint(42, 7)}. (from script python {sys.argv[0]})")
+    mydll.Squareint.argtypes = [ctypes.c_int]
+    print(f"Le carre de 7 par 7 vaut {mydll._Squarint(7)}. (from script python {sys.argv[0]})")
+    print(f"----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------");
+    mydll._Adddbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll._Adddbl.restype = ctypes.c_double
+    print(f"La somme de 16.9 plus 7.3 vaut {mydll._Adddbl(16.9, 7.3)}. (from script python {sys.argv[0]})")
+    mydll._Subdbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll._Subdbl.restype = ctypes.c_double
+    print(f"La difference de 16.9 moins 7.3 vaut {mydll._Subdbl(16.9, 7.3)}. (from script python {sys.argv[0]})")
+    mydll._Multdbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll._Multdbl.restype = ctypes.c_double
+    print(f"La multiplication de 16.9 par 7.3 vaut {mydll._Multdbl(16.9, 7.3)}. (from script python {sys.argv[0]})")
+    mydll._Squardbl.argtypes = [ctypes.c_double]
+    mydll._Squardbl.restype = ctypes.c_double
+    print(f"Le carre de 7.3 par 7.3 vaut {mydll._Squardbl(7.3)}. (from script python {sys.argv[0]})")
+else:
+    mydll.Hello(None)
+    print(f"----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------");
+    mydll.Addint.argtypes = [ctypes.c_int, ctypes.c_int]
+    mydll.Addint.restype = ctypes.c_int
+    result = mydll.Addint(42,7)
+    print(f"La somme de 42 plus 7 vaut {result}.                  (from script python {sys.argv[0]})")
+    mydll.Subint.argtypes = [ctypes.c_int, ctypes.c_int]
+    mydll.Subint.restype = ctypes.c_int
+    result = mydll.Subint(42,7)
+    print(f"La difference de 42 moins 7 vaut {result}.            (from script python {sys.argv[0]})")
+    mydll.Multint.argtypes = [ctypes.c_int, ctypes.c_int]
+    mydll.Multint.restype = ctypes.c_int
+    result = mydll.Multint(42,7)
+    print(f"La multiplication de 42 par 7 vaut {result}.         (from script python {sys.argv[0]})")
+    mydll.Divint.argtypes = [ctypes.c_int, ctypes.c_int]
+    mydll.Divint.restype = ctypes.c_int
+    print(f"La division de 42 par 7 vaut {mydll.Divint(42,7)}.                 (from script python {sys.argv[0]})")
+    mydll.Squarint.argtypes = [ctypes.c_int]
+    mydll.Squarint.restype = ctypes.c_int
+    result = mydll.Squarint(7)
+    print(f"Le carre de 7 par 7 vaut {result}.                    (from script python {sys.argv[0]})")
+    print(f"----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------");
+    mydll.Adddbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll.Adddbl.restype = ctypes.c_double
+    print(f"La somme de 16.9 plus 7.3 vaut {mydll.Adddbl(16.9, 7.3)}.                   (from script python {sys.argv[0]})")
+    mydll.Subdbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll.Subdbl.restype = ctypes.c_double
+    print(f"La difference de 16.9 moins 7.3 vaut {"{0:g}".format(mydll.Subdbl(16.9, 7.3))}.              (from script python {sys.argv[0]})")
+    mydll.Multdbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll.Multdbl.restype = ctypes.c_double
+    print(f"La multiplication de 16.9 par 7.3 vaut {"{0:g}".format(mydll.Multdbl(16.9, 7.3))}.         (from script python {sys.argv[0]})")
+    mydll.Divdbl.argtypes = [ctypes.c_double, ctypes.c_double]
+    mydll.Divdbl.restype = ctypes.c_double
+    print(f"La division de 16.9 par 7.3 vaut {"{0:g}".format(mydll.Divdbl(16.9, 7.3))}.              (from script python {sys.argv[0]})")
+    mydll.Squardbl.argtypes = [ctypes.c_double]
+    mydll.Squardbl.restype = ctypes.c_double
+    print(f"Le carre de 7.3 par 7.3 vaut {"{0:g}".format(mydll.Squardbl(7.3))}.                    (from script python {sys.argv[0]})")
+# **************************************      End file : testdll_cdecl.py      ******************************
+
+Il est un peu "complexe", car je l'ai testé sans l'utilisation d'un fichier de définition des fonctions, puis avec.
+En effet, les options par défaut du compilateur Borland C/C++ sont d'utiliser les appels de fonctions en "__cdecl"
+et donc de rajouter des "underscores" à tous les noms de fonctions exportées. J'ai souhaité pour mes tests, me 
+dispenser de cette "fioriture", en utilisant des alias de fonctions sans "_", mais avec l'usage d'un fichier de
+définition.
+
+Et, enfin les résultats obtenus avec le choix de genérations multiples (une puis deux passes) :
+
+"compile_link_dll_bcc_OK.bat ALL"
+ Lancement du batch de generation d'une DLL et deux tests de celle-ci avec Borland Compiler C/C++ 32 bits version 5.5.1
+  *********  Quelques caracteristiques du systeme hebergeant l'environnement de developpement.   ***********
+Name
+Microsoft Windows 11 Famille|C:\WINDOWS|\Device\Harddisk1\Partition3
+
+Version
+10.0.22631
+
+OSArchitecture
+64-bit
+
+ **********      Pour cette generation le premier parametre vaut "ALL" et le deuxieme "32".     *************
+  *********************************     Generation de la DLL.       ***********************************
+src/dll_core.c:
+  *****************            Listage des symboles exportes de la DLL 32 bits                          *****************
+                   Display of File DLL_CORE.DLL
+
+EXPORT ord:0022='Adddbl'
+EXPORT ord:0016='Addint'
+EXPORT ord:0025='Divdbl'
+EXPORT ord:0020='Divint'
+EXPORT ord:0001='DllEntryPoint'
+EXPORT ord:0014='DllMain'
+EXPORT ord:0017='Hello'
+EXPORT ord:0024='Multdbl'
+EXPORT ord:0019='Multint'
+EXPORT ord:0026='Squardbl'
+EXPORT ord:0021='Squarint'
+EXPORT ord:0023='Subdbl'
+EXPORT ord:0018='Subint'
+EXPORT ord:0008='_Adddbl'
+EXPORT ord:0003='_Addint'
+EXPORT ord:0011='_Divdbl'
+EXPORT ord:0006='_Divint'
+EXPORT ord:0015='_DllMain'
+EXPORT ord:0002='_Hello'
+EXPORT ord:0010='_Multdbl'
+EXPORT ord:0005='_Multint'
+EXPORT ord:0012='_Squardbl'
+EXPORT ord:0007='_Squarint'
+EXPORT ord:0009='_Subdbl'
+EXPORT ord:0004='_Subint'
+EXPORT ord:0013='___CPPdebugHook'
+
+  *************  Generation et lancement du premier programme de test de la DLL en mode implicite.   ************
+src\testdll_implicit.c:
+Warning W8004 src\testdll_implicit.c 19: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_implicit.c 16: 'result' is assigned a value that is never used in function main
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+Le resultat de l'addition de 42 plus 7 vaut : 49.        (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la soustraction de 42 moins 7 vaut : 35.  (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la multiplication de 42 par 7 vaut : 294. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la division de 42 par 7 vaut : 6.         (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7 par 7 vaut : 49.                           (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+DLL detaching from process...
+  *************  Generation et lancement du deuxieme programme de test de la DLL en mode explicite.  *************
+src\testdll_explicit.c:
+Warning W8064 src\testdll_explicit.c 48: Call to function with no prototype in function main
+Warning W8004 src\testdll_explicit.c 30: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_explicit.c 27: 'result' is assigned a value that is never used in function main
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 42 moins 7 vaut 35.  (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 42 par 7 vaut 294. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 42 par 7 vaut 6.         (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7 par 7 vaut 49.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+DLL detaching from process...
+  *************              Lancement du script python de test de la DLL.                           *************
+Version python : 3.12 32bit
+Unable to load the specified DLL : dll_core.dll.
+"******************          Compilation de la DLL.        *******************"
+src\dll_core.c:
+"*****************    Edition des liens (linkage) de la DLL.      ***************"
+  *****************            Listage des symboles exportes de la DLL 32 bits                          *****************
+                   Display of File DLL_CORE.DLL
+
+EXPORT ord:0022='Adddbl'
+EXPORT ord:0016='Addint'
+EXPORT ord:0025='Divdbl'
+EXPORT ord:0020='Divint'
+EXPORT ord:0001='DllEntryPoint'
+EXPORT ord:0014='DllMain'
+EXPORT ord:0017='Hello'
+EXPORT ord:0024='Multdbl'
+EXPORT ord:0019='Multint'
+EXPORT ord:0026='Squardbl'
+EXPORT ord:0021='Squarint'
+EXPORT ord:0023='Subdbl'
+EXPORT ord:0018='Subint'
+EXPORT ord:0008='_Adddbl'
+EXPORT ord:0003='_Addint'
+EXPORT ord:0011='_Divdbl'
+EXPORT ord:0006='_Divint'
+EXPORT ord:0015='_DllMain'
+EXPORT ord:0002='_Hello'
+EXPORT ord:0010='_Multdbl'
+EXPORT ord:0005='_Multint'
+EXPORT ord:0012='_Squardbl'
+EXPORT ord:0007='_Squarint'
+EXPORT ord:0009='_Subdbl'
+EXPORT ord:0004='_Subint'
+EXPORT ord:0013='___CPPdebugHook'
+
+"************     Generation et lancement du premier programme de test de la DLL en mode implicite.      *************"
+src\testdll_implicit.c:
+Warning W8004 src\testdll_implicit.c 19: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_implicit.c 16: 'result' is assigned a value that is never used in function main
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+Le resultat de l'addition de 42 plus 7 vaut : 49.        (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la soustraction de 42 moins 7 vaut : 35.  (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la multiplication de 42 par 7 vaut : 294. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la division de 42 par 7 vaut : 6.         (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7 par 7 vaut : 49.                           (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+DLL detaching from process...
+"************     Generation et lancement du deuxieme programme de test de la DLL en mode explicite.     ************"
+src\testdll_explicit.c:
+Warning W8064 src\testdll_explicit.c 48: Call to function with no prototype in function main
+Warning W8004 src\testdll_explicit.c 30: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_explicit.c 27: 'result' is assigned a value that is never used in function main
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 42 moins 7 vaut 35.  (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 42 par 7 vaut 294. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 42 par 7 vaut 6.         (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7 par 7 vaut 49.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+DLL detaching from process...
+"****************                  Lancement du script python de test de la DLL.                  ********************"
+Version python : 3.12 32bit
+Unable to load the specified DLL : dll_core.dll.
+       Fin de la generation de la DLL et des tests avec Borland Compiler C/C++ 32 bits version 5.5.1
+  
+Seul l'appel du script python (32 bits) ne fonctionne pas du tout avec ce compilateur, sinon tous les appels aux
+fonctions de la DLL générée fonctionnent très bien, et même le passage par l'entry de la DLL fonctionne aussi,
+vous les trouverez dans les traces avec les messages "DLL attaching to process..." et "DLL detaching from process..."
+Et je peux appeler les fonctions de la DLL dans les différents programmes de tests, sans les préfixer par "_", 
+ce que je trouve plus naturel.
+
+Au sujet de l'erreur lors du test python, il faut se souvenir que ce compilateur ne gère que des formats de librairies
+en mode OMF, alors que la norme "standard" sur Windows est plutôt COFF. Un outil comme "objconv" peut alors servir à 
+réaliser des transformations sur des objets ou des librairies statiques, notamment par des passages de OMF vers COFF,
+mais il n'est pas capable d'agir sur des exécutables ou des DLL.
+
+A partir de cette option, j'ai essayé d'aller un peu plus loin, dans cette direction, en essayant de convertir 
+les fichiers OBJ ou LIB générés par ce compilateur aveçl'outil "objconv".
+J'ai essuyé un premier échec avec le test de transformation de la librairie "dll_core.lib", l'outil "objconv" me 
+renvoie une errue rd format interne de cette librairie. J'essaye alors avec succès sur le fichier objet :
+
+objconv -fcoff dll_core.obj dll_core_coff.obj
+
+Toute se passe bien, alors je passe par la génération de la DLL avec l'outil "dllwrap", mais il me faut alors 
+modifier le fichier de définition utilisé précédemment, car "dllwrap" me signale plusieurs fois des erreurs. 
+J'essaye de progresser avec celles-ci, et je modifie alors le fichier de définition en conséquence :
+
+"dll_core_coff.def" :
+
+EXPORTS
+_DllEntryPoint@12=DllEntryPoint@12
+_DllMain@12=DllEntryPoint@12
+Addint
+Hello
+Subint
+Multint
+Divint
+Squarint
+Adddbl
+Subdbl
+Multdbl
+Divdbl
+Squardbl
+
+Il reste alors une dernière erreur signalée par "dllwrap" car il n'arrive pas à résoudre le symbole "GetLastError".
+
+Après avoir lu en détail les options possible de "objconv", je m'aperçois que cet outil peut "aussi" servir à la
+"transformation" de symboles. Je décide alors de modifier la ligne de commande associée à cet outil pour ne plus 
+avoir l'erreur liée à l'indétermination de "GetLastError" (énorme "bidouille" !!!)
+
+objconv -fcoff -nr:GetLastError:DllEntryPoint dll_core.obj dll_core_coff.obj
+
+ET je relance alors "dllwrap" après tous mes essais, de la manière suivante :
+
+dllwrap --enable-stdcall-fixup --def dll_core_coff.def -o dll_core_coff.dll dll_core_coff.obj
+
+Et là, enfin, le test avec le script python aboutit, sauf que l'appel au point d'entrée de la DLL lui ne fonctionne
+pas, ce qui me semble normal au vu du changement de nom imposé par ce compilateur : "DllEntryPoint". Mais, même
+en essayant de donner un alias à ce point d'entrée avec l'outil "objconv", toujours aucune trace de l'appel à ce
+point d'entrée :
+
+objconv -fcoff -nr:GetLastError:DllEntryPoint -ar:DllEntryPoint:DllMain dll_core.obj dll_core_coff.obj
+dllwrap --enable-stdcall-fixup --def dll_core_coff.def -o dll_core_coff.dll dll_core_coff.obj
+
+Je m'arrête ici pour ce bilan qui devait aller au bout des tests avec une DLL et le compilateur Borland et qui 
+se termine avec succès, même si le chargement de la DLL avec le script python tombe en échec, peut-être parce 
+que le point d'entrée de la DLL n'est pas celui attendu habituellement : il se dénomme "DllEntryPoint" au lieu
+de "DllMain" ou "LibMain". J'ai essayé avec le script python en mode "__stdcall", sans succès.
+Je pense que le format de la DLL engendré par le compilateur Borland C/C++ n'est pas standard sur Windows pour
+être utilisé en dehors du "scope" de ce compilateur.
+
+Mais je vous donne quand même le source de mon nouveau script de génération de la DLL :
+
+@echo off
+REM
+REM   	Script de génération de la DLL dll_core.dll et des programmee de test : "testdll_implicit.exe" (chargement implicite de la DLL),
+REM 	"testdll_explicit.exe" (chargement explicite de la DLL), et enfin du script de test écrit en python.
+REM		Ce fichier de commande est paramètrable avec deux paraamètres : 
+REM			a) le premier paramètre permet de choisir la compilation et le linkage des programmes en une seule passe
+REM 			soit la compilation et le linkage en deux passes successives : compilation séparée puis linkage,
+REM 		b) le deuxième paramètre définit soit une compilation et un linkage en mode 32 bits, soit en mode 64 bits
+REM 	 		pour les compilateurs qui le supportent.
+REM     Le premier paramètre peut prendre les valeurs suivantes :
+REM 		ONE ou TWO or ALL (or unknown value, because only ONE and TWO value are tested during execution)
+REM     Et le deuxième paramètre peut prendre les valeurs suivantes :
+REM 		32, 64 ou  ALL si vous souhaitez lancer les deux générations, 32 bits et 64 bits.
+REM 	Dans le cas du compilateur Borland C/C++, une seule génération possible : 32 bits, ce deuxième paramètre est donc ignoré.
+REM
+REM 	Author : 						Thierry DECHAIZE
+REM		Date creation/modification : 	20/11/2023
+REM 	Reason of modifications : 	n° 1 - reprise pour apporter des améliorations au script initial : appel de fonctions dans les branches du test
+REM 										sur le premier paramètre.
+REM 	 							n° 2 - Des reliquats de description d'options d'un autre compilateur C à retirer et à remplacer par les bonnes options.
+REM 	 							n° 3 - Remplacement de l'utilitaire "impdef" par "tdump" et generation de la library directement dans les options
+REM 										(simplification).
+REM 	Version number :				1.1.3          	(version majeure . version mineure . patch level)
+
+echo. Lancement du batch de generation d'une DLL et deux tests de celle-ci avec Borland Compiler C/C++ 32 bits version 5.5.1
+REM     Affichage du nom du système d'exploitation Windows :              			Microsoft Windows 11 Famille (par exemple)
+REM 	Affichage de la version du système Windows :              					10.0.22621 (par exemple)
+REM 	Affichage de l'architecture du processeur supportant le système Windows :   64-bit (par exemple)    
+echo.  *********  Quelques caracteristiques du systeme hebergeant l'environnement de developpement.   ***********
+WMIC OS GET Name
+WMIC OS GET Version
+WMIC OS GET OSArchitecture
+
+REM 	Save of initial PATH on PATHINIT variable
+set PATHINIT=%PATH%
+REM      Mandatory, add to PATH the binary directory of compiler Borland C/C++ (You can adapt this directory at your personal software environment)
+REM 	 I add two directory to transform OMF to COFF  format of OBJ file to the test with script python : 
+REM 			C:\mingw32\bin 		to access tool "dllwrap", maybe you can position this directory to your own environment (MSYS2, MingW64, ...) 
+REM 			C:\Outils\objconv 	to access tool "objconv", because I stored all my tools on Windows on directory C:\Outils
+set PATH=C:\BCC55\bin;C:\mingw32\bin;C:\Outils\objconv;%PATH%
+echo. **********      Pour cette generation le premier parametre vaut "%1" et le deuxieme "%2".     *************
+
+IF "%1" == "ONE" ( 
+   call :complinkONE
+) ELSE (
+   IF "%1" == "TWO" (
+      call :complinkTWO
+   ) ELSE (
+      call :complinkONE
+	  call :complinkTWO
+	)
+)
+
+goto FIN
+
+:complinkONE
+REM 	Format of command "bcc32" (bcc32 is a one-step program to compile and link C++, C and ASM files)
+REM 	 			BCC32 [ options ] file[s] * = default; -x- = turn switch x off 
+REM 	Generation of the DLL in "one pass", with many options :
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WDR							-> set generation to Windows DLL (mandatory, in evidence !!!) and 
+REM 	-RT-							-> disable runtime type id (RTTI) (default is -RT)
+REM 	-x- 							-> disable exception handling 
+REM 	-Dxxxxxxxxxx 	 				-> define a variable xxxxxxxxxx used by precompiler
+REM 	-Ixxxxxxxx  					-> set the search path to include files
+REM 	-Lxxxxxxxx  					-> set the search path to library files (many option -L.... or list of search directory separated by ";")
+REM 	-lGi							-> -lxxx add option to linker, here, option to generate lib file.
+REM 	don't use -e output_file		-> force name of output file, although this name is the same of source file extend of .EXE or .DLL
+REM     		C code does not need runtime type id or exception handling so they are suppressed with -RT- and -x-
+REM     		noeh32.lib stubs out any of those things found in the libraries, making the output file smaller
+echo.  *********************************           Generation de la DLL.            ***********************************
+bcc32 -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK -lGi src/dll_core.c noeh32.lib
+REM     Add src/dll_core.def on the precedent line don't work. Only presence of dll_core.def on present directory work fine !!!!
+REM 	Erratic behaviour of Borland Compiler C/C++, this compiler exploit directly file dll_core.def without message or advertizing !!!!!! 
+REM     Not mandatory, the use of "implib" utility", because option -lGi added with precedent command "bcc32" generate it. Fine !!!
+REM  implib -c dll_core.lib dll_core.dll
+echo.  ***************** 	           Listage des symboles exportes de la DLL 32 bits				 *****************
+REM     Use of "tdump" utility" to extract export symbols of dll. It's fine : find symbols/functions with "_", but although without this prefix.
+tdump -q -ee dll_core.dll
+REM 	Generation of the main test program of DLL in "one pass", with implicit load of DLL : a console application.
+echo.  *************  Generation et lancement du premier programme de test de la DLL en mode implicite.   *************
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WC								-> set generation to console program (entry of programm is only "main" not "WinMain")
+bcc32 -q -WC -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK src\testdll_implicit.c dll_core.lib 
+REM 	Run the main test program of DLL in "one pass", with implicit load of DLL :					All success.
+testdll_implicit.exe
+echo.  *************  Generation et lancement du deuxieme programme de test de la DLL en mode explicite.  *************
+REM 	Generation of the main test program of DLL in "one pass", with explicit load of DLL : a console application.
+bcc32 -q -WC -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK src\testdll_explicit.c dll_core.lib
+REM 	Run the main test program of DLL in "one pass", with explicit load of DLL:					All success.
+testdll_explicit.exe
+echo.  *************            Lancement du script python de test de la "very tranformed" DLL            *************
+REM 	Run the script python to test DLL with arguments passed on "__cdecl" format (another script test exist with call passed on "__stdcall" format)
+REM 	Failed if you respect standard format of obj/lib of this compiler (OMF format), and format of initial DLL (PE format), but with special DllEntryPoint "entry point". 
+REM 	An alternative is to use two tools, first "objconv" on OBJ file to tranform it in COFF format and after create DLL with "dllwrap" tool (yes, it is a "bidouille" !).    
+objconv -fcoff -nr:GetLastError:DllEntryPoint -ar:DllEntryPoint:DllMain dll_core.obj dll_core_coff.obj
+dllwrap --enable-stdcall-fixup --def dll_core_coff.def -o dll_core_coff.dll dll_core_coff.obj													
+%PYTHON32% version.py
+%PYTHON32% testdll_cdecl.py dll_core_coff.dll
+exit /B 
+
+:complinkTWO
+echo "******************          Compilation de la DLL.        *******************"
+REM Options used with Borland compiler C/C++ 32 bits version 5.5.1 :
+REM		-c 								-> compile only, not call of linker
+REM		-q 								-> set to quiet mode (don't see copyrigth information)		
+REM 	-WDR							-> set generation to Windows DLL (mandatory, in evidence !!!) and 
+REM 	-RT-							-> disable runtime type id (RTTI) (default is -RT)
+REM 	-x- 							-> disable exception handling 
+REM 	-Dxxxxxxxxxx 	 				-> define a variable xxxxxxxxxx used by precompiler
+bcc32 -c -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG src\dll_core.c 
+REM Format general of ilink32 command : 
+REM     ILINK32 [@<respfile>][<options>] <startup> <myobjs>, [<exefile>],[<mapfile>], [<libraries>], [<deffile>], [<resfiles>]  (comma separated list of flles used by linker)
+REM Options used with linker of Borland C/C++ compiler 32 bits version 5.5.1 :
+REM 	-Tpd							-> set the linker to generate DLL  
+REM 	-aa 							-> set the linker to generate Windows 32 application (NT system or superior, like Windows 7, 8, 10 or 11)
+REM 	-x								-> enable exception handling
+REM 	/Gi    							-> option -Gi tell linker to generate .lib file, but nothing done. Change option to /Gi active generation of lib file.
+REM 	c0d32							-> Startup provide by Borland/Inprise for DLL (anther startup, can be c0w32 for windows application (GUI))
+REM  At the end of this command's line of linker, you must/can indicate def file, not same with bbc32 command line with one pass !!!!! 
+echo "*****************    Edition des liens (linkage) de la DLL.      ***************"
+ilink32 -Tpd -aa -x -q /Gi c0d32 dll_core.obj,dll_core.dll,,import32 cw32i, src\dll_core.def
+REM    Not mandatory, because option -Gi used by linker don't generate library file, but option /Gi do. Good surprise !!!
+REM implib -c dll_core.lib dll_core.dll
+echo.  ***************** 	       Listage des symboles exportes de la DLL 32 bits				*****************
+REM     Use of "tdump" utility" to extract export symbols of dll. It's fine : find symbols/functions with "_", but although without this prefix.
+tdump -q -ee dll_core.dll
+echo "************     Generation et lancement du premier programme de test de la DLL en mode implicite.      *************"
+bcc32 -q -c -D_WIN32 -DNDEBUG src\testdll_implicit.c 
+REM Options used with linker of Borland C/C++ compiler 32 bits version 5.5.1 :
+REM 	-Tpe							-> set option to generate executable
+REM 	-ap 							-> set option to generate console application
+REM 	-c								-> case sensitive linking
+REM 	-Lxxxxxxxx  					-> set the search path to library files (many option -L.... or list of search directory separated by ";")
+REM 	c0x32.obj						-> Startup provide by Borland/Inprise for console application (anther startup, can be c0w32 for windows application (GUI))
+ilink32 -Tpe -ap -c -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK c0x32.obj testdll_implicit.obj,testdll_implicit.exe,,import32 cw32i dll_core.lib
+REM 	Run the main test program of DLL in "two pass", with explicit load of DLL :	  		All success.
+testdll_implicit.exe
+echo   ************     Generation et lancement du deuxieme programme de test de la DLL en mode explicite.     ************
+bcc32 -q -c -D_WIN32 -DNDEBUG src\testdll_explicit.c 
+ilink32 -Tpe -ap -c -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK c0x32.obj testdll_explicit.obj,testdll_explicit.exe,,import32 cw32i dll_core.lib
+REM 	Run the main test program of DLL in "two pass", with explicit load of DLL :			All success.
+testdll_explicit.exe
+echo   ****************        Lancement du script python de test de la "very transformed" DLL.           ********************
+REM 	Run the script python to test DLL with arguments passed on "__cdecl" format (another script test exist with call passed on "__stdcall" format)
+REM 	Failed if you respect standard format of obj/lib of this compiler (OMF format), and format of initial DLL (PE format), but with special DllEntryPoint "entry point". 
+REM 	An alternative is to use two tools, first "objconv" on OBJ file to tranform it in COFF format and after create DLL with "dllwrap" tool (yes, it is a "bidouille" !).  
+objconv -fcoff -nr:GetLastError:DllEntryPoint -ar:DllEntryPoint:DllMain dll_core.obj dll_core_coff.obj
+dllwrap --enable-stdcall-fixup --def dll_core_coff.def -o dll_core_coff.dll dll_core_coff.obj													
+%PYTHON32% version.py
+%PYTHON32% testdll_cdecl.py dll_core_coff.dll
+exit /B 
+
+:FIN
+echo.       Fin de la generation de la DLL et des tests avec Borland Compiler C/C++ 32 bits version 5.5.1   
+REM 	Return in initial PATH
+set PATH=%PATHINIT%
+
+Et, le résultat final de mes tests en l'appelant de la façon suivante :
+
+compile_link_dll_bcc_OK.bat ALL
+ Lancement du batch de generation d'une DLL et deux tests de celle-ci avec Borland Compiler C/C++ 32 bits version 5.5.1
+  *********  Quelques caracteristiques du systeme hebergeant l'environnement de developpement.   ***********
+Name
+Microsoft Windows 11 Famille|C:\WINDOWS|\Device\Harddisk1\Partition3
+
+Version
+10.0.22631
+
+OSArchitecture
+64-bit
+
+ **********      Pour cette generation le premier parametre vaut "ALL" et le deuxieme "".     *************
+  *********************************           Generation de la DLL.            ***********************************
+src/dll_core.c:
+  *****************                Listage des symboles exportes de la DLL 32 bits                               *****************
+                   Display of File DLL_CORE.DLL
+
+EXPORT ord:0022='Adddbl'
+EXPORT ord:0016='Addint'
+EXPORT ord:0025='Divdbl'
+EXPORT ord:0020='Divint'
+EXPORT ord:0001='DllEntryPoint'
+EXPORT ord:0014='DllMain'
+EXPORT ord:0017='Hello'
+EXPORT ord:0024='Multdbl'
+EXPORT ord:0019='Multint'
+EXPORT ord:0026='Squardbl'
+EXPORT ord:0021='Squarint'
+EXPORT ord:0023='Subdbl'
+EXPORT ord:0018='Subint'
+EXPORT ord:0008='_Adddbl'
+EXPORT ord:0003='_Addint'
+EXPORT ord:0011='_Divdbl'
+EXPORT ord:0006='_Divint'
+EXPORT ord:0015='_DllMain'
+EXPORT ord:0002='_Hello'
+EXPORT ord:0010='_Multdbl'
+EXPORT ord:0005='_Multint'
+EXPORT ord:0012='_Squardbl'
+EXPORT ord:0007='_Squarint'
+EXPORT ord:0009='_Subdbl'
+EXPORT ord:0004='_Subint'
+EXPORT ord:0013='___CPPdebugHook'
+
+  *************  Generation et lancement du premier programme de test de la DLL en mode implicite.   *************
+src\testdll_implicit.c:
+Warning W8004 src\testdll_implicit.c 19: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_implicit.c 16: 'result' is assigned a value that is never used in function main
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+Le resultat de l'addition de 42 plus 7 vaut : 49.        (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la soustraction de 42 moins 7 vaut : 35.  (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la multiplication de 42 par 7 vaut : 294. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la division de 42 par 7 vaut : 6.         (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7 par 7 vaut : 49.                           (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+DLL detaching from process...
+  *************  Generation et lancement du deuxieme programme de test de la DLL en mode explicite.  *************
+src\testdll_explicit.c:
+Warning W8064 src\testdll_explicit.c 48: Call to function with no prototype in function main
+Warning W8004 src\testdll_explicit.c 30: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_explicit.c 27: 'result' is assigned a value that is never used in function main
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 42 moins 7 vaut 35.  (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 42 par 7 vaut 294. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 42 par 7 vaut 6.         (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7 par 7 vaut 49.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+DLL detaching from process...
+  *************            Lancement du script python de test de la "very tranformed" DLL            *************
+
+Input file: dll_core.obj, output file: dll_core_coff.obj
+Converting from OMF32 to COFF32
+Checksums are zero
+Warning 1211: 99 comment records ignored
+
+  0 Debug sections removed
+  0 Exception sections removed
+  2 Symbol names changed
+  1 Public symbol names aliased
+dllwrap: WARNING: dllwrap is deprecated, use gcc -shared or ld -shared instead
+
+Version python : 3.12 32bit
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.                  (from script python testdll_cdecl.py)
+La difference de 42 moins 7 vaut 35.            (from script python testdll_cdecl.py)
+La multiplication de 42 par 7 vaut 294.         (from script python testdll_cdecl.py)
+La division de 42 par 7 vaut 6.                 (from script python testdll_cdecl.py)
+Le carre de 7 par 7 vaut 49.                    (from script python testdll_cdecl.py)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.2.                   (from script python testdll_cdecl.py)
+La difference de 16.9 moins 7.3 vaut 9.6.              (from script python testdll_cdecl.py)
+La multiplication de 16.9 par 7.3 vaut 123.37.         (from script python testdll_cdecl.py)
+La division de 16.9 par 7.3 vaut 2.31507.              (from script python testdll_cdecl.py)
+Le carre de 7.3 par 7.3 vaut 53.29.                    (from script python testdll_cdecl.py)
+"******************          Compilation de la DLL.        *******************"
+src\dll_core.c:
+"*****************    Edition des liens (linkage) de la DLL.      ***************"
+  *****************            Listage des symboles exportes de la DLL 32 bits                          *****************
+                   Display of File DLL_CORE.DLL
+
+EXPORT ord:0022='Adddbl'
+EXPORT ord:0016='Addint'
+EXPORT ord:0025='Divdbl'
+EXPORT ord:0020='Divint'
+EXPORT ord:0001='DllEntryPoint'
+EXPORT ord:0014='DllMain'
+EXPORT ord:0017='Hello'
+EXPORT ord:0024='Multdbl'
+EXPORT ord:0019='Multint'
+EXPORT ord:0026='Squardbl'
+EXPORT ord:0021='Squarint'
+EXPORT ord:0023='Subdbl'
+EXPORT ord:0018='Subint'
+EXPORT ord:0008='_Adddbl'
+EXPORT ord:0003='_Addint'
+EXPORT ord:0011='_Divdbl'
+EXPORT ord:0006='_Divint'
+EXPORT ord:0015='_DllMain'
+EXPORT ord:0002='_Hello'
+EXPORT ord:0010='_Multdbl'
+EXPORT ord:0005='_Multint'
+EXPORT ord:0012='_Squardbl'
+EXPORT ord:0007='_Squarint'
+EXPORT ord:0009='_Subdbl'
+EXPORT ord:0004='_Subint'
+EXPORT ord:0013='___CPPdebugHook'
+
+"************     Generation et lancement du premier programme de test de la DLL en mode implicite.      *************"
+src\testdll_implicit.c:
+Warning W8004 src\testdll_implicit.c 19: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_implicit.c 16: 'result' is assigned a value that is never used in function main
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+Le resultat de l'addition de 42 plus 7 vaut : 49.        (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la soustraction de 42 moins 7 vaut : 35.  (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la multiplication de 42 par 7 vaut : 294. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le resultat de la division de 42 par 7 vaut : 6.         (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7 par 7 vaut : 49.                           (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with implicit load of DLL C:\src\Borland\TestDLL\testdll_implicit.exe)
+DLL detaching from process...
+  ************     Generation et lancement du deuxieme programme de test de la DLL en mode explicite.     ************
+src\testdll_explicit.c:
+Warning W8064 src\testdll_explicit.c 48: Call to function with no prototype in function main
+Warning W8004 src\testdll_explicit.c 30: 'result1' is assigned a value that is never used in function main
+Warning W8004 src\testdll_explicit.c 27: 'result' is assigned a value that is never used in function main
+Turbo Incremental Link 5.00 Copyright (c) 1997, 2000 Borland
+DLL attaching to process...
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 42 moins 7 vaut 35.  (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 42 par 7 vaut 294. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 42 par 7 vaut 6.         (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7 par 7 vaut 49.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.20.          (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La soustraction de 16.9 moins 7.3 vaut 9.60.   (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La multiplication de 16.9 par 7.3 vaut 123.37. (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+La division de 16.9 par 7.3 vaut 2.31507.      (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+Le carre de 7.3 par 7.3 vaut 53.29.            (from application with explicit load of DLL C:\src\Borland\TestDLL\testdll_explicit.exe)
+DLL detaching from process...
+  ****************        Lancement du script python de test de la "very transformed" DLL.           ********************
+
+Input file: dll_core.obj, output file: dll_core_coff.obj
+Converting from OMF32 to COFF32
+Checksums are zero
+Warning 1211: 99 comment records ignored
+
+  0 Debug sections removed
+  0 Exception sections removed
+  2 Symbol names changed
+  1 Public symbol names aliased
+dllwrap: WARNING: dllwrap is deprecated, use gcc -shared or ld -shared instead
+
+Version python : 3.12 32bit
+Hello from a DLL!
+----------------------       Lancement des operations arithmetiques avec des entiers        -----------------------
+La somme de 42 plus 7 vaut 49.                  (from script python testdll_cdecl.py)
+La difference de 42 moins 7 vaut 35.            (from script python testdll_cdecl.py)
+La multiplication de 42 par 7 vaut 294.         (from script python testdll_cdecl.py)
+La division de 42 par 7 vaut 6.                 (from script python testdll_cdecl.py)
+Le carre de 7 par 7 vaut 49.                    (from script python testdll_cdecl.py)
+----------------------    Lancement des operations arithmetiques avec des doubles flottants   ---------------------
+La somme de 16.9 plus 7.3 vaut 24.2.                   (from script python testdll_cdecl.py)
+La difference de 16.9 moins 7.3 vaut 9.6.              (from script python testdll_cdecl.py)
+La multiplication de 16.9 par 7.3 vaut 123.37.         (from script python testdll_cdecl.py)
+La division de 16.9 par 7.3 vaut 2.31507.              (from script python testdll_cdecl.py)
+Le carre de 7.3 par 7.3 vaut 53.29.                    (from script python testdll_cdecl.py)
+       Fin de la generation de la DLL et des tests avec Borland Compiler C/C++ 32 bits version 5.5.1
+
+Conclusion :
+
+Avec ce compilateur Borland C/C++ version 5.5.1, même s'il est très ancien en 2023, il est donc tout à fait possible 
+de générer une DLL opérationnelle 32 bits sous Windows 11 version 64 bits.
+
+Voici les grandes lignes à retenir pour obtenir ce résultat :
+
+	a) Si vous utilisez dans le code principal de la DLL le point d'entrée DllEntryPoint (équivalent de DllMain), il 
+		faut le préfixer WINAPI et __declspec(dllexport),
+	b) Pour toutes les fonctions déclarées comme accessibles dans votre DLL, il faut les préfixer par "__declspec(dllexport)" 
+	   ou par "__declspec(dllimport)" graçe à un fichier d'include qui est alors partagé entre la génération de la DLL et 
+	   son utilisation dans des programmes de test, avec un test sur une variable "define" (astuce et préconisation de Mark Payne)
+	c) Dans le fichier principal de votre DLL, il faut, après avoir inclus le fichier d'include précédent, déclarer
+	    le corps de chaque fonction en les préfixant par "__declspec(dllexport)" et compiler avec le define "BUILD_DLL",
+	d) Lors de la génération de la DLL, ne pas oublier de constituer le fichier lib correspondant avec l'option "-lGi"  
+		si vous êtes en mode "Une passe" ou l'option "/Gi" si vous êtes en mode "Deux passes" lors du linkage de la DLL.
+		L'environnement de développement Borland gére aussi un utilitaire "implib" ou l'utilitaire "lib" pour constituer
+		si besoin cette libraririe "a posteriori" (mais c'est dommage !  -)). C'est ce fichier d'extension ".lib" qui 
+		servira ensuite à la résolution des symboles "externes" lors de l'édition des liens des programmes de test de la 
+		DLL (à noter que le compilateur "gcc" peut résoudre les liens directement avec la DLL).
+	e) et enfin, pour éviter l'indétermination des symboles liés aux fonctions de la DLL lorsqu'elles sont préfixées
+	    par des "_" lors de leur usage (cas du chargement implicite de la DLL), il est aussi nécessaire de constituer
+		un fichier de définition pour rajouter des alias non préfixés par "_" de chaque fonction. Attention, en déplacant 
+		ce fichier de définition sur un autre répertoire que celui du répertoire courant des générations, je n'ai pas pu
+		compiler correctement. Je l'ai donc repositionné sur ce répertoire et tout a bien fonctionné. Le compilateur Borland
+		a aussi une option possible pour supprimer ce préfixage "-u-", mais je n'ai pas réussi à le déclencher ... sans un
+		message d'erreur... Bug ???
+		
+Enfin, nous avons constater que l'appel de la DLlEntryPoint est bien restitué lors du chargement puis du déchargement de la DLL, 
+dans les deux cas de figure de test de la DLL : chargement implicite ou chargement explicite.
+
+Dans tous les cas de figure, l'appel aux différentes fonctions de la DLL est parfaitement traité avec un résultat correct.
+
+Les plus grosses contraintes d'usage de ce compilateur C (gratuit) sont de générer de librairies dynamiques (DLL) non
+conformes à la norme COFF sur systèmes Microsoft, mais au format OMF, et de ne pas générer de version 64 bits. 
+Pour cette génération, il faut acheter la version commerciale chez Embarcadero, le nouveau propriétaire des produits 
+Borland. On peut certes "bidouiller" pour faire aboutir les tests python, mais cela reste un artifice. 

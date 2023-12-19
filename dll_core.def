@@ -1,0 +1,15 @@
+EXPORTS
+DllMain=DllEntryPoint
+_DllMain=DllMain
+Addint=_Addint
+Hello=_Hello 
+Subint=_Subint 
+Multint=_Multint
+Divint=_Divint 
+Squarint=_Squarint 
+Adddbl=_Adddbl
+Subdbl=_Subdbl
+Multdbl=_Multdbl 
+Divdbl=_Divdbl 
+Squardbl=_Squardbl
+
