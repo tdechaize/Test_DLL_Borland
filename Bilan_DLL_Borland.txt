@@ -301,7 +301,7 @@ DLL detaching from process...
 Comme, on peut le voir, aucune difficulté pour générer une DLL et puis la tester avec un 
 programme de test.
 
-ATTENTION : Si vous lancer ce programme de test dans avoir le répertoire \bin du compilateur 
+ATTENTION : Si vous lancer ce programme de test sans avoir le répertoire \bin du compilateur 
 Borland dans le PATH, vous obtenez une erreur car la DLL CC3250.DLL n'est pas accessible.
 En cas de portage sur plusieurs ordinateurs, il faut veiller à la copier "au bon endroit",
 soit dans le répertoire courant, soit dans un répertoire accessible dans le PATH.
@@ -1128,7 +1128,7 @@ mais il n'est pas capable d'agir sur des exécutables ou des DLL.
 A partir de cette option, j'ai essayé d'aller un peu plus loin, dans cette direction, en essayant de convertir 
 les fichiers OBJ ou LIB générés par ce compilateur aveçl'outil "objconv".
 J'ai essuyé un premier échec avec le test de transformation de la librairie "dll_core.lib", l'outil "objconv" me 
-renvoie une errue rd format interne de cette librairie. J'essaye alors avec succès sur le fichier objet :
+renvoie une erreur de format interne de cette librairie. J'essaye alors avec succès sur le fichier objet :
 
 objconv -fcoff dll_core.obj dll_core_coff.obj
 
@@ -1161,7 +1161,7 @@ avoir l'erreur liée à l'indétermination de "GetLastError" (énorme "bidouille
 
 objconv -fcoff -nr:GetLastError:DllEntryPoint dll_core.obj dll_core_coff.obj
 
-ET je relance alors "dllwrap" après tous mes essais, de la manière suivante :
+Et je relance alors "dllwrap" après tous mes essais, de la manière suivante :
 
 dllwrap --enable-stdcall-fixup --def dll_core_coff.def -o dll_core_coff.dll dll_core_coff.obj
 
@@ -1256,6 +1256,8 @@ echo.  *********************************           Generation de la DLL.        
 bcc32 -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK -lGi src/dll_core.c noeh32.lib
 REM     Add src/dll_core.def on the precedent line don't work. Only presence of dll_core.def on present directory work fine !!!!
 REM 	Erratic behaviour of Borland Compiler C/C++, this compiler exploit directly file dll_core.def without message or advertizing !!!!!! 
+REM 	It's the reason of presence of def file in two space : 
+REM 		first directly here (root directory), but also in \src directory (file exploit by linker with two passes, because command line permit it !)
 REM     Not mandatory, the use of "implib" utility", because option -lGi added with precedent command "bcc32" generate it. Fine !!!
 REM  implib -c dll_core.lib dll_core.dll
 echo.  ***************** 	           Listage des symboles exportes de la DLL 32 bits				 *****************
@@ -1573,9 +1575,9 @@ Voici les grandes lignes à retenir pour obtenir ce résultat :
 	d) Lors de la génération de la DLL, ne pas oublier de constituer le fichier lib correspondant avec l'option "-lGi"  
 		si vous êtes en mode "Une passe" ou l'option "/Gi" si vous êtes en mode "Deux passes" lors du linkage de la DLL.
 		L'environnement de développement Borland gére aussi un utilitaire "implib" ou l'utilitaire "lib" pour constituer
-		si besoin cette libraririe "a posteriori" (mais c'est dommage !  -)). C'est ce fichier d'extension ".lib" qui 
+		si besoin cette librairie "a posteriori" (mais c'est dommage !  -)). C'est ce fichier d'extension ".lib" qui 
 		servira ensuite à la résolution des symboles "externes" lors de l'édition des liens des programmes de test de la 
-		DLL (à noter que le compilateur "gcc" peut résoudre les liens directement avec la DLL).
+		DLL en mode implicite (à noter que le compilateur "gcc" peut résoudre les liens directement avec la DLL).
 	e) et enfin, pour éviter l'indétermination des symboles liés aux fonctions de la DLL lorsqu'elles sont préfixées
 	    par des "_" lors de leur usage (cas du chargement implicite de la DLL), il est aussi nécessaire de constituer
 		un fichier de définition pour rajouter des alias non préfixés par "_" de chaque fonction. Attention, en déplacant 
@@ -1589,7 +1591,7 @@ dans les deux cas de figure de test de la DLL : chargement implicite ou chargeme
 
 Dans tous les cas de figure, l'appel aux différentes fonctions de la DLL est parfaitement traité avec un résultat correct.
 
-Les plus grosses contraintes d'usage de ce compilateur C (gratuit) sont de générer de librairies dynamiques (DLL) non
+Les plus grosses contraintes d'usage de ce compilateur C (gratuit) sont de générer de librairies statiques (LIB) non
 conformes à la norme COFF sur systèmes Microsoft, mais au format OMF, et de ne pas générer de version 64 bits. 
 Pour cette génération, il faut acheter la version commerciale chez Embarcadero, le nouveau propriétaire des produits 
-Borland. On peut certes "bidouiller" pour faire aboutir les tests python, mais cela reste un artifice. 
+Borland. On peut certes "bidouiller" pour faire aboutir les tests python, mais cela reste un "vrai" artifice. 

@@ -72,6 +72,8 @@ echo.  *********************************           Generation de la DLL.        
 bcc32 -q -WDR -RT- -x- -DBUILD_DLL -D_WIN32 -DNDEBUG -IC:\BCC55\Include -LC:\BCC55\Lib;C:\BCC55\Lib\PSDK -lGi src/dll_core.c noeh32.lib
 REM     Add src/dll_core.def on the precedent line don't work. Only presence of dll_core.def on present directory work fine !!!!
 REM 	Erratic behaviour of Borland Compiler C/C++, this compiler exploit directly file dll_core.def without message or advertizing !!!!!! 
+REM 	It's the reason of presence of def file in two space : 
+REM 		first directly here (root directory), but also in \src directory (file exploit by linker with two passes, because command line permit it !)
 REM     Not mandatory, the use of "implib" utility", because option -lGi added with precedent command "bcc32" generate it. Fine !!!
 REM  implib -c dll_core.lib dll_core.dll
 echo.  ***************** 	           Listage des symboles exportes de la DLL 32 bits				 *****************
